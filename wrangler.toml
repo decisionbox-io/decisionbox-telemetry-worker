@@ -9,7 +9,3 @@ compatibility_date = "2025-04-01"
 binding = "DB"
 database_name = "decisionbox-telemetry"
 database_id = "" # Set after: wrangler d1 create decisionbox-telemetry
-
-# Optional: restrict ingestion with a bearer token
-# [vars]
-# AUTH_TOKEN = "" # Set via: wrangler secret put AUTH_TOKEN

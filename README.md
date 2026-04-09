@@ -4,6 +4,11 @@ Cloudflare Worker that receives anonymous usage telemetry from [DecisionBox](htt
 
 No PII is collected. See the platform repo's [TELEMETRY.md](https://github.com/decisionbox-io/decisionbox-platform/blob/main/TELEMETRY.md) for full details on what data is collected and how to opt out.
 
+## Security
+
+- **Public API key** -- All requests must include `X-API-Key: dbox_tel_pub_v1_a8f3e2d1c4b5`. This key is not a secret (it's hardcoded in the open-source Go client). Its purpose is to filter out non-DecisionBox traffic and casual abuse.
+- **Rate limiting** -- Max 100 events per `install_id` per hour. Exceeding this returns HTTP 429.
+
 ## Setup
 
 ```bash
@@ -41,6 +46,7 @@ npm run dev
 # Test
 curl -X POST http://localhost:8787/v1/events \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: dbox_tel_pub_v1_a8f3e2d1c4b5" \
   -d '{"install_id":"test","version":"0.4.0","events":[{"name":"server_started","timestamp":"2026-04-09T00:00:00Z"}]}'
 ```
 
@@ -48,18 +54,16 @@ curl -X POST http://localhost:8787/v1/events \
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/events` | Ingest a batch of telemetry events |
+| `POST` | `/v1/events` | Ingest a batch of telemetry events (requires `X-API-Key` header) |
 | `GET` | `/health` | Health check |
 
-## Security
+## Schema Migration
 
-Optionally restrict access with a bearer token:
+If you already have the database and need to add the `rate_limits` table:
 
 ```bash
-wrangler secret put AUTH_TOKEN
+wrangler d1 execute decisionbox-telemetry --remote --command "CREATE TABLE IF NOT EXISTS rate_limits (install_id TEXT NOT NULL, window TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (install_id, window));"
 ```
-
-The platform sends this token via the `Authorization: Bearer <token>` header when `TELEMETRY_AUTH_TOKEN` is set.
 
 ## License
 

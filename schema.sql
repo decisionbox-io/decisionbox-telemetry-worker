@@ -1,5 +1,5 @@
 -- DecisionBox Telemetry — D1 Schema
--- Apply with: wrangler d1 execute decisionbox-telemetry --file=schema.sql
+-- Apply with: wrangler d1 execute decisionbox-telemetry --remote --file=schema.sql
 
 CREATE TABLE IF NOT EXISTS events (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS events (
     properties      TEXT,  -- JSON
     event_timestamp TEXT NOT NULL,
     received_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Rate limiting: track event count per install_id per hour window
+CREATE TABLE IF NOT EXISTS rate_limits (
+    install_id  TEXT NOT NULL,
+    window      TEXT NOT NULL,  -- ISO hour: "2026-04-09T14"
+    count       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (install_id, window)
 );
 
 -- Query patterns: by event name, by install, by time range

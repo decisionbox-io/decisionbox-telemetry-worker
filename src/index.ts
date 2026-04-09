@@ -5,6 +5,10 @@
  * it in Cloudflare D1. No PII is collected — see the platform repo's
  * TELEMETRY.md for full details on what is collected.
  *
+ * Security:
+ *   - Public API key required (filters out non-DecisionBox traffic)
+ *   - Per-install_id rate limiting (max 100 events/hour)
+ *
  * Endpoints:
  *   POST /v1/events  — Ingest a batch of telemetry events
  *   GET  /health     — Health check
@@ -12,8 +16,14 @@
 
 export interface Env {
 	DB: D1Database;
-	AUTH_TOKEN?: string;
 }
+
+// Public API key — not a secret, hardcoded in the open-source Go client.
+// Purpose: filter out casual abuse and non-DecisionBox traffic.
+const PUBLIC_API_KEY = "dbox_tel_pub_v1_a8f3e2d1c4b5";
+
+// Max events per install_id per hour window
+const RATE_LIMIT_PER_HOUR = 100;
 
 interface TelemetryEvent {
 	name: string;
@@ -50,12 +60,10 @@ export default {
 };
 
 async function handleEvents(request: Request, env: Env): Promise<Response> {
-	// Optional auth token validation
-	if (env.AUTH_TOKEN) {
-		const auth = request.headers.get("Authorization");
-		if (auth !== `Bearer ${env.AUTH_TOKEN}`) {
-			return new Response("Unauthorized", { status: 401 });
-		}
+	// Validate public API key
+	const apiKey = request.headers.get("X-API-Key");
+	if (apiKey !== PUBLIC_API_KEY) {
+		return new Response("Forbidden", { status: 403 });
 	}
 
 	let batch: TelemetryBatch;
@@ -69,9 +77,20 @@ async function handleEvents(request: Request, env: Env): Promise<Response> {
 		return new Response("Missing required fields", { status: 400 });
 	}
 
-	// Cap batch size to prevent abuse
+	// Cap batch size
 	const events = batch.events.slice(0, 100);
 
+	// Rate limit check: max RATE_LIMIT_PER_HOUR events per install_id per hour
+	const window = new Date().toISOString().slice(0, 13); // "2026-04-09T14"
+	const rateLimited = await checkRateLimit(env.DB, batch.install_id, window, events.length);
+	if (rateLimited) {
+		return new Response(JSON.stringify({ error: "rate limit exceeded" }), {
+			status: 429,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
+
+	// Insert events
 	const stmt = env.DB.prepare(
 		`INSERT INTO events (install_id, version, go_version, os, arch, service, event_name, properties, event_timestamp, received_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
@@ -102,4 +121,49 @@ async function handleEvents(request: Request, env: Env): Promise<Response> {
 		status: 202,
 		headers: { "Content-Type": "application/json" },
 	});
+}
+
+/**
+ * Check and update rate limit for an install_id.
+ * Returns true if the request should be rejected.
+ */
+async function checkRateLimit(
+	db: D1Database,
+	installId: string,
+	window: string,
+	eventCount: number
+): Promise<boolean> {
+	try {
+		// Upsert the counter and return the new total
+		await db
+			.prepare(
+				`INSERT INTO rate_limits (install_id, window, count)
+				 VALUES (?, ?, ?)
+				 ON CONFLICT (install_id, window)
+				 DO UPDATE SET count = count + ?`
+			)
+			.bind(installId, window, eventCount, eventCount)
+			.run();
+
+		const row = await db
+			.prepare(`SELECT count FROM rate_limits WHERE install_id = ? AND window = ?`)
+			.bind(installId, window)
+			.first<{ count: number }>();
+
+		if (row && row.count > RATE_LIMIT_PER_HOUR) {
+			return true;
+		}
+
+		// Cleanup old windows (keep last 2 hours only)
+		await db
+			.prepare(`DELETE FROM rate_limits WHERE window < ?`)
+			.bind(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString().slice(0, 13))
+			.run();
+
+		return false;
+	} catch (err) {
+		// If rate limiting fails, allow the request (don't block telemetry)
+		console.error("Rate limit check failed:", err);
+		return false;
+	}
 }
