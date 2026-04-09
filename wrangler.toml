@@ -9,3 +9,9 @@ compatibility_date = "2025-04-01"
 binding = "DB"
 database_name = "decisionbox-telemetry"
 database_id = "2dd5d131-be61-45ac-be43-317c933cca91"
+
+# Daily report at 08:00 UTC
+[triggers]
+crons = ["0 8 * * *"]
+
+# Set SLACK_WEBHOOK_URL via: wrangler secret put SLACK_WEBHOOK_URL
