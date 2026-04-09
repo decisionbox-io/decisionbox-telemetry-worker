@@ -59,6 +59,17 @@ export default {
 			return handleEvents(request, env);
 		}
 
+		if (url.pathname === "/v1/report" && request.method === "POST") {
+			const apiKey = request.headers.get("X-API-Key");
+			if (apiKey !== PUBLIC_API_KEY) {
+				return new Response("Forbidden", { status: 403 });
+			}
+			await sendDailyReport(env);
+			return new Response(JSON.stringify({ sent: true }), {
+				headers: { "Content-Type": "application/json" },
+			});
+		}
+
 		return new Response("Not Found", { status: 404 });
 	},
 
