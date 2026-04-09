@@ -8,4 +8,4 @@ compatibility_date = "2025-04-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "decisionbox-telemetry"
-database_id = "" # Set after: wrangler d1 create decisionbox-telemetry
+database_id = "2dd5d131-be61-45ac-be43-317c933cca91"
