@@ -1,0 +1,15 @@
+name = "decisionbox-telemetry"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+# Custom domain: telemetry.decisionbox.io
+# Configure via: wrangler deploy && wrangler domains add telemetry.decisionbox.io
+
+[[d1_databases]]
+binding = "DB"
+database_name = "decisionbox-telemetry"
+database_id = "" # Set after: wrangler d1 create decisionbox-telemetry
+
+# Optional: restrict ingestion with a bearer token
+# [vars]
+# AUTH_TOKEN = "" # Set via: wrangler secret put AUTH_TOKEN
