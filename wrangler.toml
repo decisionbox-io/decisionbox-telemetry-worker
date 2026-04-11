@@ -10,8 +10,9 @@ binding = "DB"
 database_name = "decisionbox-telemetry"
 database_id = "2dd5d131-be61-45ac-be43-317c933cca91"
 
-# Daily report at 08:00 UTC
-[triggers]
-crons = ["0 8 * * *"]
-
-# Set SLACK_WEBHOOK_URL via: wrangler secret put SLACK_WEBHOOK_URL
+# Daily reports are triggered by GitHub Actions (more reliable than CF free-plan crons).
+# See: .github/workflows/daily-report.yml
+#
+# Secrets (set via wrangler secret put):
+#   SLACK_WEBHOOK_URL  — Slack incoming webhook URL
+#   ADMIN_API_KEY      — Admin token for POST /v1/report

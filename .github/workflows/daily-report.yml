@@ -1,0 +1,25 @@
+name: Daily Report
+
+on:
+  schedule:
+    # Runs every day at 08:00 UTC
+    - cron: '0 8 * * *'
+  workflow_dispatch: {}  # Allow manual trigger from Actions tab
+
+jobs:
+  send-report:
+    name: Send daily telemetry report to Slack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /v1/report
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST https://telemetry.decisionbox.io/v1/report \
+            -H "X-Admin-Key: ${{ secrets.TELEMETRY_ADMIN_KEY }}")
+          BODY=$(echo "$RESPONSE" | head -n1)
+          STATUS=$(echo "$RESPONSE" | tail -n1)
+          echo "Status: $STATUS"
+          echo "Body: $BODY"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Report trigger failed with status $STATUS"
+            exit 1
+          fi

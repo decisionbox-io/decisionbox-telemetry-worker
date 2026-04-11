@@ -6,20 +6,24 @@
  * TELEMETRY.md for full details on what is collected.
  *
  * Security:
- *   - Public API key required (filters out non-DecisionBox traffic)
+ *   - Public API key required for /v1/events (filters out non-DecisionBox traffic)
  *   - Per-install_id rate limiting (max 100 events/hour)
+ *   - Admin API key required for /v1/report
  *
- * Cron:
- *   - Daily at 08:00 UTC — sends aggregated report to Slack
+ * Daily reports are triggered by GitHub Actions (.github/workflows/daily-report.yml)
+ * calling POST /v1/report at 08:00 UTC. This is more reliable than Cloudflare
+ * free-plan cron triggers.
  *
  * Endpoints:
- *   POST /v1/events  — Ingest a batch of telemetry events
+ *   POST /v1/events  — Ingest a batch of telemetry events (public API key)
+ *   POST /v1/report  — Trigger aggregated daily Slack report (admin API key)
  *   GET  /health     — Health check
  */
 
 export interface Env {
 	DB: D1Database;
 	SLACK_WEBHOOK_URL?: string;
+	ADMIN_API_KEY?: string;
 }
 
 // Public API key — not a secret, hardcoded in the open-source Go client.
@@ -60,8 +64,12 @@ export default {
 		}
 
 		if (url.pathname === "/v1/report" && request.method === "POST") {
-			const apiKey = request.headers.get("X-API-Key");
-			if (apiKey !== PUBLIC_API_KEY) {
+			// Admin endpoint: requires ADMIN_API_KEY (not the public API key)
+			if (!env.ADMIN_API_KEY) {
+				return new Response("Admin key not configured", { status: 503 });
+			}
+			const adminKey = request.headers.get("X-Admin-Key");
+			if (adminKey !== env.ADMIN_API_KEY) {
 				return new Response("Forbidden", { status: 403 });
 			}
 			await sendDailyReport(env);
@@ -71,10 +79,6 @@ export default {
 		}
 
 		return new Response("Not Found", { status: 404 });
-	},
-
-	async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-		await sendDailyReport(env);
 	},
 };
 
